@@ -20,7 +20,7 @@ from sendgrid.helpers.mail import (
     Mail, Attachment, FileContent, FileName,
     FileType, Disposition, To
 )
-from config_v2 import (
+from config import (
     GROUPS,
     STRIPE_SECRET_KEY,
     STRIPE_WEBHOOK_SECRET,
