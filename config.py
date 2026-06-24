@@ -7,6 +7,9 @@
 # File goes in the /pdfs folder on GitHub.
 # Issue number = month number since subscriber joined.
 
+
+import os
+
 OTTER_PUPS_ISSUES = {
     0:  "pdfs/otter_pups_free_sample.pdf",        # Welcome / Free sample
     1:  "pdfs/issue_01_bluebonnet.pdf",            # Texas Hill Country
@@ -122,7 +125,7 @@ STRIPE_SECRET_KEY     = "pk_live_51TfqVzErGSVifBGvipWPEmjM4vdd8irCW8cUM6k9tAUPIr
 STRIPE_WEBHOOK_SECRET = "YOUR_STRIPE_WEBHOOK_SECRET"
 
 # ── SENDGRID ──────────────────────────────────────────────────
-SENDGRID_API_KEY      = "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"
+SENDGRID_API_KEY      = os.environ.get(“SENDGRID_API_KEY”)
 
 # ── FREE SAMPLE ───────────────────────────────────────────────
 FREE_SAMPLE_PDF        = "pdfs/otter_pups_free_sample.pdf"
