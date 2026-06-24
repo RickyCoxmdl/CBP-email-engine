@@ -16,6 +16,7 @@ import hashlib
 
 from datetime import datetime
 from flask import Flask, request, jsonify
+from flask_cors import CORS
 from sendgrid import SendGridAPIClient
 from sendgrid.helpers.mail import (
     Mail, Attachment, FileContent, FileName,
@@ -32,6 +33,7 @@ from config import (
 )
 
 app = Flask(__name__)
+CORS(app)
 
 LS_WEBHOOK_SECRET = os.environ.get("LS_WEBHOOK_SECRET")
 
