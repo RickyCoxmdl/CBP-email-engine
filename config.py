@@ -123,7 +123,7 @@ Thank you for exploring with Finn, Ollie, and Lila!
 # ── STRIPE ────────────────────────────────────────────────────
 
 # ── SENDGRID ──────────────────────────────────────────────────
-SENDGRID_API_KEY      = os.environ.get(“SENDGRID_API_KEY”)
+SENDGRID_API_KEY      = os.environ.get("SENDGRID_API_KEY")
 
 # ── FREE SAMPLE ───────────────────────────────────────────────
 FREE_SAMPLE_PDF        = "pdfs/otter_pups_free_sample.pdf"
