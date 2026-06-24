@@ -121,8 +121,6 @@ Thank you for exploring with Finn, Ollie, and Lila!
 }
 
 # ── STRIPE ────────────────────────────────────────────────────
-STRIPE_SECRET_KEY     = "pk_live_51TfqVzErGSVifBGvipWPEmjM4vdd8irCW8cUM6k9tAUPIr2mOrMUlDizPvuUcC5bTz30MrM6ZIrljZCfFVjA3DWY00jbO764EZ"
-STRIPE_WEBHOOK_SECRET = "YOUR_STRIPE_WEBHOOK_SECRET"
 
 # ── SENDGRID ──────────────────────────────────────────────────
 SENDGRID_API_KEY      = os.environ.get(“SENDGRID_API_KEY”)
