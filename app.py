@@ -1,17 +1,18 @@
 """
-CRYSTAL BLUE PRESS — EMAIL ENGINE v2
+CRYSTAL BLUE PRESS — EMAIL ENGINE v3
 =====================================
+Lemon Squeezy webhook handler.
 Evergreen issue sequencing:
   - Every subscriber starts at Issue #1
   - Each monthly renewal sends the next issue in sequence
   - Subscriber data stored in subscribers.json
-  - Works for unlimited groups
 """
 
 import os
 import json
 import base64
-import stripe
+import hmac
+import hashlib
 
 from datetime import datetime
 from flask import Flask, request, jsonify
@@ -22,8 +23,6 @@ from sendgrid.helpers.mail import (
 )
 from config import (
     GROUPS,
-    STRIPE_SECRET_KEY,
-    STRIPE_WEBHOOK_SECRET,
     SENDGRID_API_KEY,
     FREE_SAMPLE_PDF,
     FREE_SAMPLE_FROM_NAME,
@@ -33,9 +32,9 @@ from config import (
 )
 
 app = Flask(__name__)
-stripe.api_key = STRIPE_SECRET_KEY
 
-# ── Subscriber tracking file ──────────────────────────────────
+LS_WEBHOOK_SECRET = os.environ.get("LS_WEBHOOK_SECRET")
+
 SUBSCRIBERS_FILE = "subscribers.json"
 
 
@@ -51,10 +50,6 @@ def save_subscribers(data):
         json.dump(data, f, indent=2)
 
 
-def get_subscriber(customer_id):
-    return load_subscribers().get(customer_id, {})
-
-
 def set_subscriber(customer_id, data):
     subs = load_subscribers()
     subs[customer_id] = data
@@ -62,9 +57,8 @@ def set_subscriber(customer_id, data):
 
 
 def increment_issue(customer_id):
-    """Bump subscriber to next issue. Returns new issue number."""
     subs = load_subscribers()
-    sub  = subs.get(customer_id, {"issue": 0})
+    sub = subs.get(customer_id, {"issue": 0})
     sub["issue"] = sub.get("issue", 0) + 1
     sub["last_sent"] = datetime.utcnow().isoformat()
     subs[customer_id] = sub
@@ -72,12 +66,13 @@ def increment_issue(customer_id):
     return sub["issue"]
 
 
-# ══════════════════════════════════════════════════════════════
-# EMAIL HELPER
-# ══════════════════════════════════════════════════════════════
+def verify_signature(payload, signature):
+    secret = LS_WEBHOOK_SECRET.encode("utf-8")
+    expected = hmac.new(secret, payload, hashlib.sha256).hexdigest()
+    return hmac.compare_digest(expected, signature)
 
-def send_email_with_pdf(to_email, subject, body, pdf_path,
-                         from_name, from_email):
+
+def send_email_with_pdf(to_email, subject, body, pdf_path, from_name, from_email):
     if not os.path.exists(pdf_path):
         print(f"ERROR: PDF not found → {pdf_path}")
         return False
@@ -108,43 +103,14 @@ def send_email_with_pdf(to_email, subject, body, pdf_path,
         return False
 
 
-def get_customer_info(customer_id):
-    try:
-        c = stripe.Customer.retrieve(customer_id)
-        email = c.get("email", "")
-        name  = c.get("name", "") or ""
-        first = name.split()[0] if name else "Explorer"
-        return email, first
-    except Exception as e:
-        print(f"Stripe error: {e}")
-        return None, "Explorer"
-
-
-def get_group_by_price_id(price_id):
-    for key, group in GROUPS.items():
-        if price_id in (
-            group.get("stripe_monthly_price_id"),
-            group.get("stripe_annual_price_id"),
-        ):
-            return group
-    return None
-
-
-# ══════════════════════════════════════════════════════════════
-# SEND ISSUE
-# ══════════════════════════════════════════════════════════════
-
 def send_issue(customer_id, email, first_name, group, issue_number):
-    """Send the correct issue PDF for this subscriber's position."""
     sequence = group["issue_sequence"]
-    titles   = group["issue_titles"]
+    titles = group["issue_titles"]
 
     if issue_number not in sequence:
-        # No more issues yet — send coming soon email
         print(f"No issue {issue_number} yet — sending coming soon")
         subject = group["coming_soon_subject"]
-        body    = group["coming_soon_body"].format(first_name=first_name)
-        # Send plain email (no PDF)
+        body = group["coming_soon_body"].format(first_name=first_name)
         message = Mail(
             from_email=(group["from_email"], group["from_name"]),
             to_emails=To(email),
@@ -158,41 +124,36 @@ def send_issue(customer_id, email, first_name, group, issue_number):
             print(f"Coming soon email error: {e}")
         return
 
-    pdf_path    = sequence[issue_number]
+    pdf_path = sequence[issue_number]
     issue_title = titles.get(issue_number, f"Issue #{issue_number}")
 
     if issue_number == 1:
-        # Welcome email
         subject = group["welcome_subject"]
-        body    = group["welcome_body"].format(first_name=first_name)
+        body = group["welcome_body"].format(first_name=first_name)
     else:
         subject = group["monthly_subject"].format(issue_number=issue_number)
-        body    = group["monthly_body"].format(
-            first_name   = first_name,
-            issue_number = issue_number,
-            issue_title  = issue_title,
+        body = group["monthly_body"].format(
+            first_name=first_name,
+            issue_number=issue_number,
+            issue_title=issue_title,
         )
 
     send_email_with_pdf(
-        to_email   = email,
-        subject    = subject,
-        body       = body,
-        pdf_path   = pdf_path,
-        from_name  = group["from_name"],
-        from_email = group["from_email"],
+        to_email=email,
+        subject=subject,
+        body=body,
+        pdf_path=pdf_path,
+        from_name=group["from_name"],
+        from_email=group["from_email"],
     )
 
-
-# ══════════════════════════════════════════════════════════════
-# ROUTES
-# ══════════════════════════════════════════════════════════════
 
 @app.route("/", methods=["GET"])
 def health():
     subs = load_subscribers()
     return jsonify({
-        "status":      "ok",
-        "service":     "Crystal Blue Press Email Engine v2",
+        "status": "ok",
+        "service": "Crystal Blue Press Email Engine v3",
         "subscribers": len(subs),
     })
 
@@ -204,127 +165,87 @@ def free_sample():
         return jsonify({"error": "No data"}), 400
 
     first_name = data.get("first_name", "Explorer").strip()
-    email      = data.get("email", "").strip()
+    email = data.get("email", "").strip()
 
     if not email or "@" not in email:
         return jsonify({"error": "Invalid email"}), 400
 
     success = send_email_with_pdf(
-        to_email   = email,
-        subject    = FREE_SAMPLE_SUBJECT,
-        body       = FREE_SAMPLE_BODY.format(first_name=first_name),
-        pdf_path   = FREE_SAMPLE_PDF,
-        from_name  = FREE_SAMPLE_FROM_NAME,
-        from_email = FREE_SAMPLE_FROM_EMAIL,
+        to_email=email,
+        subject=FREE_SAMPLE_SUBJECT,
+        body=FREE_SAMPLE_BODY.format(first_name=first_name),
+        pdf_path=FREE_SAMPLE_PDF,
+        from_name=FREE_SAMPLE_FROM_NAME,
+        from_email=FREE_SAMPLE_FROM_EMAIL,
     )
 
     return jsonify({"status": "sent" if success else "failed"}), 200 if success else 500
 
 
-@app.route("/stripe-webhook", methods=["POST"])
-def stripe_webhook():
-    payload    = request.get_data()
-    sig_header = request.headers.get("Stripe-Signature")
+@app.route("/ls-webhook", methods=["POST"])
+def ls_webhook():
+    payload = request.get_data()
+    signature = request.headers.get("X-Signature", "")
 
-    try:
-        event = stripe.Webhook.construct_event(
-            payload, sig_header, STRIPE_WEBHOOK_SECRET
-        )
-    except stripe.error.SignatureVerificationError:
+    if not verify_signature(payload, signature):
         return jsonify({"error": "Invalid signature"}), 400
 
-    event_type = event["type"]
-    data       = event["data"]["object"]
+    data = request.get_json()
+    event_type = data.get("meta", {}).get("event_name", "")
+    attrs = data.get("data", {}).get("attributes", {})
 
-    # ── NEW SUBSCRIPTION → Issue #1 ───────────────────────────
-    if event_type == "customer.subscription.created":
-        customer_id = data.get("customer")
-        items       = data.get("items", {}).get("data", [])
-        price_id    = items[0]["price"]["id"] if items else None
+    customer_email = attrs.get("user_email", "")
+    customer_name = attrs.get("user_name", "") or "Explorer"
+    first_name = customer_name.split()[0]
+    customer_id = str(data.get("data", {}).get("id", ""))
 
-        if not price_id:
-            return jsonify({"status": "no price"}), 200
+    group = GROUPS.get("otter_pups_club")
+    if not group:
+        return jsonify({"status": "no group"}), 200
 
-        group = get_group_by_price_id(price_id)
-        if not group:
-            return jsonify({"status": "unknown group"}), 200
-
-        email, first_name = get_customer_info(customer_id)
-        if not email:
-            return jsonify({"status": "no email"}), 200
-
-        # Initialize subscriber at issue 1
+    if event_type == "subscription_created":
         set_subscriber(customer_id, {
-            "email":      email,
+            "email": customer_email,
             "first_name": first_name,
-            "group":      next(k for k, v in GROUPS.items() if v is group),
-            "issue":      1,
-            "joined":     datetime.utcnow().isoformat(),
-            "last_sent":  datetime.utcnow().isoformat(),
+            "group": "otter_pups_club",
+            "issue": 1,
+            "joined": datetime.utcnow().isoformat(),
+            "last_sent": datetime.utcnow().isoformat(),
         })
+        send_issue(customer_id, customer_email, first_name, group, 1)
 
-        send_issue(customer_id, email, first_name, group, 1)
-
-    # ── MONTHLY RENEWAL → Next issue ─────────────────────────
-    elif event_type == "invoice.payment_succeeded":
-        billing_reason = data.get("billing_reason")
-        if billing_reason == "subscription_create":
-            # Already handled above
+    elif event_type == "subscription_payment_success":
+        sub = load_subscribers().get(customer_id, {})
+        if sub.get("issue", 0) == 1 and sub.get("joined", "")[:10] == datetime.utcnow().isoformat()[:10]:
             return jsonify({"status": "skipped"}), 200
-
-        customer_id = data.get("customer")
-        lines       = data.get("lines", {}).get("data", [])
-        price_id    = lines[0]["price"]["id"] if lines else None
-
-        if not price_id:
-            return jsonify({"status": "no price"}), 200
-
-        group = get_group_by_price_id(price_id)
-        if not group:
-            return jsonify({"status": "unknown group"}), 200
-
-        email, first_name = get_customer_info(customer_id)
-        if not email:
-            return jsonify({"status": "no email"}), 200
-
-        # Increment to next issue
         next_issue = increment_issue(customer_id)
+        send_issue(customer_id, customer_email, first_name, group, next_issue)
 
-        send_issue(customer_id, email, first_name, group, next_issue)
-
-    # ── CANCELLATION → Log it ─────────────────────────────────
-    elif event_type == "customer.subscription.deleted":
-        customer_id = data.get("customer")
+    elif event_type == "subscription_cancelled":
         subs = load_subscribers()
         if customer_id in subs:
             subs[customer_id]["cancelled"] = datetime.utcnow().isoformat()
             save_subscribers(subs)
-            print(f"Subscriber {customer_id} cancelled")
 
     return jsonify({"status": "ok"}), 200
 
 
 @app.route("/subscribers", methods=["GET"])
 def list_subscribers():
-    """Quick dashboard — see all subscribers and their issue progress."""
     subs = load_subscribers()
     summary = []
     for cid, data in subs.items():
         summary.append({
-            "email":      data.get("email"),
+            "email": data.get("email"),
             "first_name": data.get("first_name"),
-            "group":      data.get("group"),
-            "issue":      data.get("issue"),
-            "joined":     data.get("joined"),
-            "cancelled":  data.get("cancelled", None),
+            "group": data.get("group"),
+            "issue": data.get("issue"),
+            "joined": data.get("joined"),
+            "cancelled": data.get("cancelled", None),
         })
     summary.sort(key=lambda x: x["joined"] or "", reverse=True)
     return jsonify({"total": len(summary), "subscribers": summary})
 
-
-# ══════════════════════════════════════════════════════════════
-# RUN
-# ══════════════════════════════════════════════════════════════
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
