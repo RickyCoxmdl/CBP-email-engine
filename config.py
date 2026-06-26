@@ -128,7 +128,7 @@ SENDGRID_API_KEY      = os.environ.get("SENDGRID_API_KEY")
 # ── FREE SAMPLE ───────────────────────────────────────────────
 FREE_SAMPLE_PDF        = "pdfs/otter_pups_free_sample.pdf"
 FREE_SAMPLE_FROM_NAME  = "Otter Pups Club"
-FREE_SAMPLE_FROM_EMAIL = "hello@crystalbluepress.com"
+FREE_SAMPLE_FROM_EMAIL = "rickycoxmdl@gmail.com"
 FREE_SAMPLE_SUBJECT    = "🐾 Your Free Otter Pups Explorer Pack!"
 FREE_SAMPLE_BODY       = """Hi {first_name}!
 
@@ -138,7 +138,6 @@ Inside you'll find a story, activities, coloring pages, nature discovery, and mo
 
 If your family loves it, join us for a new national park adventure every month:
   👉 Monthly: $9.99/month
-  👉 Annual:  $99/year (2 months free!)
 
 Explore all 63 U.S. National Parks with Finn, Ollie & Lila — one adventure at a time.
 
