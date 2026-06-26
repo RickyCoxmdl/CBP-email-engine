@@ -28,7 +28,7 @@ OTTER_PUPS_ISSUES = {
     # 13: "pdfs/issue_13_xxx.pdf",
     # 14: "pdfs/issue_14_xxx.pdf",
 }
-
+    
 OTTER_PUPS_ISSUE_TITLES = {
     0:  "The Lantern Shore Treasure Hunt",
     1:  "The Bluebonnet Adventure — Texas Hill Country",
@@ -128,7 +128,7 @@ SENDGRID_API_KEY      = os.environ.get("SENDGRID_API_KEY")
 # ── FREE SAMPLE ───────────────────────────────────────────────
 FREE_SAMPLE_PDF        = "pdfs/otter_pups_free_sample.pdf"
 FREE_SAMPLE_FROM_NAME  = "Otter Pups Club"
-FREE_SAMPLE_FROM_EMAIL = "rickycoxmdl@gmail.com"
+FREE_SAMPLE_FROM_EMAIL = "hello@crystalbluepress.com"
 FREE_SAMPLE_SUBJECT    = "🐾 Your Free Otter Pups Explorer Pack!"
 FREE_SAMPLE_BODY       = """Hi {first_name}!
 
